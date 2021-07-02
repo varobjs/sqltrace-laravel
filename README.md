@@ -51,9 +51,32 @@ grep traceid -A 10 /tmp/sql_trace.log
 ```
 
 
+# 进阶
+
+## 配置项
+
+```
+# 记录 SQL 文件，默认 /tmp/sql.log
+SQL_TRACE_SQL_FILE=
+# 记录 SQL Trace 文件，默认 /tmp/sql_trace.log
+SQL_TRACE_TRACE_FILE=
+# 记录错误文件，默认 /tmp/sql_error.log
+SQL_TRACE_ERROR_FILE=
+
+# 开启分析模式，true 开启，默认 false 关闭，开启后 & redis 配置有效，统计全部信息
+SQL_TRACE_ANALYSE=
+
+# redis 使用的配置
+SQL_TRACE_REDIS_HOST=
+SQL_TRACE_REDIS_PORT=
+SQL_TRACE_REDIS_PASSWORD=
+```
+
+
+
 
 ## TODO
 
-[ ] 推送指标到第三方接口
+[] 推送指标到第三方接口
 
-[ ] 完善判断逻辑: 记录日志 or 计数 
+[] 完善判断逻辑: 记录日志 or 计数

@@ -2,7 +2,10 @@
 
 namespace LaravelSQLTrace;
 
+use Exception;
 use Illuminate\Database\Events\QueryExecuted;
+use Redis;
+use Throwable;
 
 class SQLTraceEventListener
 {
@@ -10,6 +13,10 @@ class SQLTraceEventListener
     protected $fp1;
     /** @var resource $fp2 */
     protected $fp2;
+    /** @var resource $fp3 */
+    protected $fp3;
+    /** @var Redis $predis */
+    protected $predis;
 
     /**
      * Create the event listener.
@@ -19,14 +26,22 @@ class SQLTraceEventListener
     public function __construct()
     {
         ini_set('date.timezone', 'Asia/Shanghai');
-        $this->fp1 = fopen('/tmp/sql.log', 'a+');
-        $this->fp2 = fopen('/tmp/sql_trace.log', 'a+');
+        $this->fp1 = @fopen(env('SQL_TRACE_SQL_FILE', '/tmp/sql.log'), 'a+');
+        $this->fp2 = @fopen(env('SQL_TRACE_TRACE_FILE', '/tmp/sql_trace.log'), 'a+');
+        $this->fp3 = @fopen(env('SQL_TRACE_ERROR_FILE', '/tmp/sql_error.log'), 'a+');
+        try {
+            $this->predis = XRedis::getInstance()->predis;
+        } catch (Throwable $e) {
+            $this->error('[laravel-sql-trace-error-01] ' . $e->getMessage());
+            $this->predis = null;
+        }
     }
 
     public function __destruct()
     {
         fclose($this->fp1);
         fclose($this->fp2);
+        fclose($this->fp3);
     }
 
     /**
@@ -50,30 +65,38 @@ class SQLTraceEventListener
      */
     public function handle(QueryExecuted $event)
     {
-        $curr_sql_trace_id = static::get_curr_sql_trace_id();
-        $db_host = $event->connection->getConfig('host');
-        $exec_time = $event->time;
-        $sql = $event->sql;
-        $bindings = implode(', ', $event->bindings);
-
-        if (!$this->analyseSQL($db_host, $exec_time, $sql)) {
+        if (!$this->checkIsOk()) {
+            $this->error('[laravel-sql-trace-error-02] check is not ok');
             return;
         }
+        try {
+            $curr_sql_trace_id = static::get_curr_sql_trace_id();
+            $db_host = $event->connection->getConfig('host');
+            $exec_time = $event->time;
+            $sql = $event->sql;
+            $bindings = implode(', ', $event->bindings);
 
-        $this->saveSQLToFile(
-            $db_host,
-            $exec_time,
-            $curr_sql_trace_id,
-            $sql,
-            $bindings
-        );
+            if (!$this->analyseAndContinue($db_host, $exec_time, $sql)) {
+                return;
+            }
 
-        $last_trace = $this->saveTraceToFile(
-            debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 20),
-            $curr_sql_trace_id
-        );
+            $this->saveSQLToFile(
+                $db_host,
+                $exec_time,
+                $curr_sql_trace_id,
+                $sql,
+                $bindings
+            );
 
-        $this->pushLog($db_host, $exec_time, $curr_sql_trace_id, $sql, $bindings, $last_trace);
+            $last_trace = $this->saveTraceToFile(
+                debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 20),
+                $curr_sql_trace_id
+            );
+
+            $this->pushLog($db_host, $exec_time, $curr_sql_trace_id, $sql, $bindings, $last_trace);
+        } catch (Throwable $e) {
+            $this->error('[laravel-sql-trace-error-03] ' . $e->getMessage());
+        }
     }
 
     /**
@@ -108,7 +131,6 @@ class SQLTraceEventListener
         }
         return $_trace;
     }
-
 
     /**
      * // ==> /tmp/sql.log
@@ -169,6 +191,7 @@ class SQLTraceEventListener
     }
 
     /**
+     * 主动推送指标到第三方
      * @param string $db_host
      * @param float $exec_time
      * @param string $curr_sql_trace_id
@@ -188,19 +211,59 @@ class SQLTraceEventListener
     }
 
     /**
-     * 再此处处理，redis 计数等统计操作
+     * 在此处处理，redis 计数等统计操作
      *
      * @param string $db_host
      * @param float $exec_time
      * @param string $sql
      * @return bool 返回 false，当前执行完成，不再执行后续逻辑，比如降级处理的写入日志文件，推送第三方
+     * @throws Exception
      */
-    protected function analyseSQL(
+    protected function analyseAndContinue(
         string $db_host,
         float $exec_time,
         string $sql
     ): bool
     {
-        return true;
+        if (app()->environment() === 'local') {
+            $is_continue = true;
+        } else {
+            $is_continue = $exec_time > 0.1 || random_int(1, 20000) > (20000 - 20);
+        }
+
+        if (env('SQL_TRACE_ANALYSE', 'false') === true && $this->predis) {
+            $sql_key = md5($db_host . $sql);
+            $hash_key = 'SQL_TRACE_HASH_KEY:' . date('Ymd');
+            $hash_key_incr = 'SQL_TRACE_HASH_KEY_INCR:' . date('Ymd');
+            $hash_key_time_incr = 'SQL_TRACE_HASH_KEY_TIME_INCR:' . date('Ymd');
+            if (!$this->predis->hExists($hash_key, $sql_key) || $is_continue) {
+                $this->predis->hSet($hash_key, $sql_key, sprintf(
+                    "```db_host=%s```app_host=%s```pid=%s```sql=%s```",
+                    $db_host,
+                    $_SERVER['REMOTE_ADDR'] ?? '-',
+                    getmypid(),
+                    $sql
+                ));
+            }
+            $this->predis->hIncrBy($hash_key_incr, $sql_key, 1);
+            $this->predis->hIncrByFloat($hash_key_time_incr, $sql_key, $exec_time);
+            if ($is_continue) {
+                $this->predis->ttl($hash_key) === -1 and $this->predis->expire($hash_key, 2 * 86400);
+                $this->predis->ttl($hash_key_incr) === -1 and $this->predis->expire($hash_key_incr, 2 * 86400);
+                $this->predis->ttl($hash_key_time_incr) === -1 and $this->predis->expire($hash_key_time_incr, 2 * 86400);
+            }
+        }
+
+        return $is_continue;
+    }
+
+    protected function error(string $error)
+    {
+        @fwrite($this->fp3, $error);
+    }
+
+    protected function checkIsOk(): bool
+    {
+        return $this->fp1 !== false || $this->fp2 !== false;
     }
 }

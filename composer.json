@@ -2,10 +2,15 @@
   "name": "varobj/laravel-sqltrace",
   "type": "project",
   "description": "The Laravel Framework's sql trace",
-  "keywords": ["framework", "laravel", "sqltrace"],
+  "keywords": [
+    "framework",
+    "laravel",
+    "sqltrace"
+  ],
   "license": "MIT",
   "require": {
-    "php": "^7.2"
+    "php": "^7.2",
+    "ext-redis": "*"
   },
   "autoload": {
     "psr-4": {
