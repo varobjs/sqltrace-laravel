@@ -32,6 +32,19 @@ class SQLTraceEventListener
     /**
      * Handle the event.
      *
+     * 只要把当前类挂载到 QueryExecuted 事件上，
+     * Laravel 的每次数据库执行操作都会执行 handle 函数
+     * ```
+     * app/Providers/EventServiceProvider.php
+     *
+     * ...
+     * protected $listen = [
+     *   QueryExecuted::class => [ \LaravelSQLTrace\SQLTraceEventListener::class, ]
+     * ];
+     * ...
+     *
+     * ```
+     *
      * @param QueryExecuted $event
      * @return void
      */
@@ -43,7 +56,7 @@ class SQLTraceEventListener
         $sql = $event->sql;
         $bindings = implode(', ', $event->bindings);
 
-        if (!$this->isLogging($db_host, $exec_time, $sql)) {
+        if (!$this->analyseSQL($db_host, $exec_time, $sql)) {
             return;
         }
 
@@ -175,13 +188,14 @@ class SQLTraceEventListener
     }
 
     /**
-     * 通过条件判断是否记录此处SQL的信息
+     * 再此处处理，redis 计数等统计操作
+     *
      * @param string $db_host
      * @param float $exec_time
      * @param string $sql
-     * @return bool
+     * @return bool 返回 false，当前执行完成，不再执行后续逻辑，比如降级处理的写入日志文件，推送第三方
      */
-    protected function isLogging(
+    protected function analyseSQL(
         string $db_host,
         float $exec_time,
         string $sql
