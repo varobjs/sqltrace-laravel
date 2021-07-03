@@ -29,6 +29,7 @@ QueryExecuted::class => [ \LaravelSQLTrace\SQLTraceEventListener::class, ]
 ## 效果
 
 ![demo](./example/demo.png)
+![demo1](./example/demo1.png)
 
 
 ## SQL 日志
@@ -58,10 +59,6 @@ grep traceid -A 10 /tmp/sql_trace.log
 ```
 # 记录 SQL 文件，默认 /tmp/sql.log
 SQL_TRACE_SQL_FILE=
-# 记录 SQL Trace 文件，默认 /tmp/sql_trace.log
-SQL_TRACE_TRACE_FILE=
-# 记录错误文件，默认 /tmp/sql_error.log
-SQL_TRACE_ERROR_FILE=
 
 # 开启分析模式，true 开启，默认 false 关闭，开启后 & redis 配置有效，统计全部信息
 SQL_TRACE_ANALYSE=

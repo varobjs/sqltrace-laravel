@@ -2,11 +2,7 @@
 
 namespace LaravelSQLTrace;
 
-use Phalcon\Storage\Exception;
-use Phalcon\Storage\SerializerFactory;
 use Redis;
-use Varobj\XP\Exception\SystemConfigException;
-use Varobj\XP\Exception\UsageErrorException;
 
 /**
  * XRedis 工具类,单例模式 && 默认读取配置
@@ -66,7 +62,7 @@ class XRedis
      */
     public function __construct(array $params = [])
     {
-        $host = $params['host'] ?? env('SQL_TRACE_REDIS_HOST', env('REDIS_HOST', ''));
+        $host = $params['host'] ?? env('SQL_TRACE_REDIS_HOST', env('REDIS_HOST', '127.0.0.1'));
         $port = $params['port'] ?? env('SQL_TRACE_REDIS_PORT', env('REDIS_PORT', 6379));
         if (!$host && !$port) {
             throw new \Exception('redis配置不正确');
