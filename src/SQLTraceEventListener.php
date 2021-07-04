@@ -207,7 +207,7 @@ class SQLTraceEventListener
 
     protected static function get_datetime_ms(): string
     {
-        return date('Y-m-d/H:i:s.') . (int)(10000 * (microtime(true) - time()));
+        return date('Y-m-d H:i:s.') . (int)(10000 * (microtime(true) - time()));
     }
 
     protected static $global_app_trace_id;

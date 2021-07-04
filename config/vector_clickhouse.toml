@@ -1,0 +1,62 @@
+# Vector's API for introspection
+[api]
+enabled = true
+address = "127.0.0.1:8686"
+
+# Host-level logs
+[sources.logs]
+type = "file"
+include = ["/tmp/sql.log"]
+
+# Host-level metrics (cpu, memory, disk, etc)
+#[sources.host_metrics]
+#type = "host_metrics"
+
+# Vector's own internal metrics
+#[sources.internal_metrics]
+#type = "internal_metrics"
+
+
+
+# --> Add transforms here to parse, enrich, and process data
+[transforms.foo]
+type = "grok_parser"
+inputs = ["logs"]
+pattern = "\"%{WORD:app_trace_id}\",\"%{WORD:sql_trace_id}\",\"%{TIMESTAMP_ISO8601:time}\",\"%{IPV4:db_host}\",\"%{HOSTNAME:exec_host}\",\"%{NUMBER:exec_time}\",\"%{INT:pid}\",\"%{GREEDYDATA:php_sapi}\",\"%{URIPATHPARAM:request_uri}\",\"%{GREEDYDATA:referer}\",\"%{WORD:md5}\",\"%{GREEDYDATA:trace_sql}\",\"%{GREEDYDATA:trace_sql_binds}\""
+
+# \"%{WORD:app_trace_id}\"
+# \"%{WORD:sql_trace_id}\"
+# \"%{TIMESTAMP_ISO8601:time}\"
+# \"%{IPV4:db_host}\"
+# \"%{HOSTNAME:exec_host}\"
+# \"%{NUMBER:exec_time}\"
+# \"%{INT:pid}\"
+# \"%{GREEDYDATA:php_sapi}\"
+# \"%{URIPATHPARAM:request_uri}\"
+# \"%{GREEDYDATA:referer}\"
+# \"%{WORD:md5}\"
+# \"%{GREEDYDATA:trace_sql}\"
+# \"%{GREEDYDATA:trace_sql_binds}\"
+
+# %{QS:trace_sql_binds}
+
+# print all events, replace this with your desired sink(s)
+# https://vector.dev/docs/reference/sinks/
+[sinks.out]
+type = "console"
+inputs = ["foo"]
+encoding.codec = "json"
+
+#[sinks.out_file]
+#type = "file"
+#inputs = [ "logs" ]
+#path = "/tmp/vector.log"
+#encoding.codec = "json"
+
+[sinks.out_clickhouse]
+type = "clickhouse" # required
+inputs = [ "foo" ] # required
+compression = "gzip" # optional, default
+database = "deli_com" # optional, no default
+endpoint = "http://localhost:18123" # required
+table = "trace_sql" # required
