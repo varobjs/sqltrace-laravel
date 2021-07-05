@@ -12,7 +12,7 @@ PHP version >= 7.2
 ## 安装
 
 ```
-composer require varobj/laravel-sqltrace ^1.0
+composer require varobj/laravel-sqltrace:^1.0
 ```
 
 ## 使用
