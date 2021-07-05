@@ -190,7 +190,7 @@ class SQLTraceEventListener
             PHP_SAPI !== 'cli' ? ($_SERVER['HTTP_REFERER'] ?? '') : '',
             md5($sql),
             $sql,
-            $bindings,
+            $bindings
         ));
         fwrite($this->fp2, sprintf(
             "\n[%s][%s][%s][%fms]\n%s\n%s [%s]\n%s\n",
