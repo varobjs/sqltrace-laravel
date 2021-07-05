@@ -1,0 +1,59 @@
+# Vector's API for introspection
+[api]
+enabled = true
+address = "127.0.0.1:8686"
+
+# Host-level logs
+[sources.sql_file_log]
+type = "file"
+include = ["/tmp/sql_trace.log"]
+
+# Host-level metrics (cpu, memory, disk, etc)
+#[sources.host_metrics]
+#type = "host_metrics"
+
+# Vector's own internal metrics
+#[sources.internal_metrics]
+#type = "internal_metrics"
+
+# "54ED27D6","/code/doc-api/app/DocrApp/Services/LoginService.php","314","App\DocrApp\Services\LoginService->registerInitInfo(..)"
+# --> Add transforms here to parse, enrich, and process data
+[transforms.sql_file_log_grok]
+type = "grok_parser"
+inputs = ["sql_file_log"]
+pattern = "\"%{WORD:sql_trace_id}\",\"%{PATH:file}\",\"%{INT:line}\",\"%{GREEDYDATA:class}\""
+
+
+[transforms.sql_file_log_clickhose]
+type = "remap"
+inputs = ["sql_file_log_grok"]
+source = '''
+  . = {
+    "sql_trace_id": .sql_trace_id,
+    "file": .file,
+    "line": to_int!(.line),
+    "class": .class
+  }
+  '''
+
+# print all events, replace this with your desired sink(s)
+# https://vector.dev/docs/reference/sinks/
+[sinks.sql_file_log_out]
+type = "console"
+inputs = ["sql_file_log_clickhose"]
+encoding.codec = "json"
+
+#[sinks.out_file]
+#type = "file"
+#inputs = [ "logs" ]
+#path = "/tmp/vector.log"
+#encoding.codec = "json"
+
+[sinks.sql_file_log_clickhose_sink]
+type = "clickhouse" # required
+inputs = ["sql_file_log_clickhose"] # required
+compression = "gzip" # optional, default
+database = "deli_com" # optional, no default
+endpoint = "http://localhost:18123" # required
+encoding.except_fields = ["created_at"]
+table = "trace_sql_file" # required
