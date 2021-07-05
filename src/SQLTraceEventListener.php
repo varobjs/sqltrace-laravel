@@ -65,7 +65,7 @@ class SQLTraceEventListener
      *
      * ...
      * protected $listen = [
-     *   QueryExecuted::class => [ \LaravelSQLTrace\SQLTraceEventListener::class, ]
+     *   \Illuminate\Database\Events\QueryExecuted::class => [ \LaravelSQLTrace\SQLTraceEventListener::class, ],
      * ];
      * ...
      *

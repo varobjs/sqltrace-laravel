@@ -22,7 +22,7 @@ composer require varobj/laravel-sqltrace ^1.0
 `$listen` 数组中添加下面一行
 
 ```
-QueryExecuted::class => [ \LaravelSQLTrace\SQLTraceEventListener::class, ]
+\Illuminate\Database\Events\QueryExecuted::class => [ \LaravelSQLTrace\SQLTraceEventListener::class, ],
 ```
 
 如果本地使用提交变更代码，可以使用
