@@ -4,7 +4,7 @@
 
 ## 版本要求 
 
-版本 >= 6
+Laravel 版本 >= 6
 
 PHP version >= 7.2
 
@@ -12,7 +12,7 @@ PHP version >= 7.2
 ## 安装
 
 ```
-composer require varobj/laravel-sqltrace
+composer require varobj/laravel-sqltrace ^1.0
 ```
 
 ## 使用
@@ -23,6 +23,13 @@ composer require varobj/laravel-sqltrace
 
 ```
 QueryExecuted::class => [ \LaravelSQLTrace\SQLTraceEventListener::class, ]
+```
+
+如果本地使用提交变更代码，可以使用
+
+```
+git update-index --skip-worktree composer.json
+git update-index --skip-worktree app/Providers/EventServiceProvider.php
 ```
 
 
@@ -77,7 +84,6 @@ tail -f /tmp/sql_trace_pretty.log
 ```
 grep sql_trace_id -A 10 /tmp/sql_trace_pretty.log
 ```
-
 
 # 进阶
 
