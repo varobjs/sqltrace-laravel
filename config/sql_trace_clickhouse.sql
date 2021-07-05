@@ -1,6 +1,7 @@
 create table trace_sql
 (
     timestamp       DateTime64(4) comment '时间',
+    app_name        String       default '' comment 'app名称',
     app_trace_id    String       default '' comment 'sql执行所在生命周期的trace_id',
     sql_trace_id    String       default '' comment '当前sql的trace_id',
     db_host         String       default '' comment '数据库地址',

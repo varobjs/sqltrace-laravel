@@ -177,7 +177,8 @@ class SQLTraceEventListener
     {
         global $argv;
         fwrite($this->fp1, sprintf(
-            "\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
+            "\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
+            config('app.name', 'default'),
             static::get_global_app_trace_id(),
             $curr_sql_trace_id,
             static::get_datetime_ms(),

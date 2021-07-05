@@ -21,7 +21,7 @@ include = ["/tmp/sql.log"]
 [transforms.sql_log_grok]
 type = "grok_parser"
 inputs = ["sql_log"]
-pattern = "\"%{WORD:app_trace_id}\",\"%{WORD:sql_trace_id}\",\"%{GREEDYDATA:time}\",\"%{IPV4:db_host}\",\"%{HOSTNAME:exec_host}\",\"%{NUMBER:exec_time}\",\"%{INT:pid}\",\"%{GREEDYDATA:php_sapi}\",\"%{URIPATHPARAM:request_uri}\",\"%{GREEDYDATA:referer}\",\"%{WORD:md5}\",\"%{GREEDYDATA:trace_sql}\",\"%{GREEDYDATA:trace_sql_binds}\""
+pattern = "\"%{GREEDYDATA:app_name}\",\"%{WORD:app_trace_id}\",\"%{WORD:sql_trace_id}\",\"%{GREEDYDATA:time}\",\"%{IPV4:db_host}\",\"%{HOSTNAME:exec_host}\",\"%{NUMBER:exec_time}\",\"%{INT:pid}\",\"%{GREEDYDATA:php_sapi}\",\"%{URIPATHPARAM:request_uri}\",\"%{GREEDYDATA:referer}\",\"%{WORD:md5}\",\"%{GREEDYDATA:trace_sql}\",\"%{GREEDYDATA:trace_sql_binds}\""
 
 [transforms.sql_log_clickhouse]
 type = "remap"
@@ -29,6 +29,7 @@ inputs = ["sql_log_grok"]
 source = '''
   . = {
     "timestamp": .time,
+    "app_name": .app_name,
     "app_trace_id": .app_trace_id,
     "sql_trace_id": .sql_trace_id,
     "db_host": .db_host,
