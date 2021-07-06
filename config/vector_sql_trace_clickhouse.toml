@@ -21,7 +21,7 @@ include = ["/tmp/sql_trace.log"]
 [transforms.sql_file_log_grok]
 type = "grok_parser"
 inputs = ["sql_file_log"]
-pattern = "\"%{WORD:sql_trace_id}\",\"%{PATH:file}\",\"%{INT:line}\",\"%{GREEDYDATA:class}\""
+pattern = "\"%{GREEDYDATA:time}\",\"%{WORD:sql_trace_id}\",\"%{PATH:file}\",\"%{INT:line}\",\"%{GREEDYDATA:class}\""
 
 
 [transforms.sql_file_log_clickhose]
@@ -29,6 +29,7 @@ type = "remap"
 inputs = ["sql_file_log_grok"]
 source = '''
   . = {
+    "timestamp": .time,
     "sql_trace_id": .sql_trace_id,
     "file": .file,
     "line": to_int!(.line),
@@ -56,4 +57,4 @@ compression = "gzip" # optional, default
 database = "deli_com" # optional, no default
 endpoint = "http://localhost:18123" # required
 encoding.except_fields = ["created_at"]
-table = "trace_sql_file" # required
+table = "trace_sql_file_new" # required

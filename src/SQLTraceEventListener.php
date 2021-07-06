@@ -85,6 +85,8 @@ class SQLTraceEventListener
             $db_host = $event->connection->getConfig('host');
             $exec_time = $event->time; // ms
             $sql = $event->sql;
+            // trim \r\n 替换成 space
+            $sql = str_replace(["\r", "\n", "\r\n"], '', $sql);
             $bindings = implode(', ', $event->bindings);
 
             if (!$this->analyseAndContinue($db_host, $exec_time, $sql)) {
@@ -124,14 +126,15 @@ class SQLTraceEventListener
         $format_traces = [];
         while (!empty($traces)) {
             $trace = array_pop($traces);
-            if (isset($trace['file']) && strstr($trace['file'], 'vendor') === false) {
+            if (strstr($trace['file'], 'vendor/laravel') === false) {
                 $format_trace = [
-                    'file' => $trace['file'],
+                    'file' => $trace['file'] ?? '-',
                     'line' => $trace['line'] ?? 0,
                     'class' => $trace['class'] . $trace['type'] . $trace['function'] . '(..)'
                 ];
                 fwrite($this->fp3, sprintf(
-                    "\"%s\",\"%s\",\"%s\",\"%s\"\n",
+                    "\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
+                    static::get_datetime_ms(),
                     $curr_sql_trace_id,
                     $format_trace['file'],
                     $format_trace['line'],

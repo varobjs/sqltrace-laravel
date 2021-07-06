@@ -64,4 +64,5 @@ inputs = ["sql_log_clickhouse"] # required
 compression = "gzip" # optional, default
 database = "deli_com" # optional, no default
 endpoint = "http://localhost:18123" # required
-table = "trace_sql" # required
+encoding.except_fields = ["created_at"]
+table = "trace_sql_new" # required
