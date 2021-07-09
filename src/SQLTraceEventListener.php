@@ -38,11 +38,13 @@ class SQLTraceEventListener
         $this->fp3 = @fopen($sql_file . '_trace.log', 'a+');
         $this->fp4 = @fopen($sql_file . '_trace_pretty.log', 'a+');
         $this->fp5 = @fopen($sql_file . '_error.log', 'a+');
-        try {
-            $this->predis = XRedis::getInstance()->predis;
-        } catch (Throwable $e) {
-            $this->error('[laravel-sql-trace-error-01] ' . $e->getMessage());
-            $this->predis = null;
+        if (env('SQL_TRACE_ANALYSE', 'false')) {
+            try {
+                $this->predis = XRedis::getInstance()->predis;
+            } catch (Throwable $e) {
+                $this->error('[laravel-sql-trace-error-01] ' . $e->getMessage());
+                $this->predis = null;
+            }
         }
     }
 
