@@ -87,7 +87,8 @@ class SQLTraceEventListener
             $sql = $event->sql;
             // trim \r\n 替换成 space
             $sql = str_replace(["\r", "\n", "\r\n"], '', $sql);
-            $bindings = implode(', ', $event->bindings);
+            // 需要单行显示，方便日志集成处理工具
+            $bindings = str_replace(["\r", "\n", "\r\n"], '', var_export($event->bindings, true));
 
             if (!$this->analyseAndContinue($db_host, $exec_time, $sql)) {
                 return;
