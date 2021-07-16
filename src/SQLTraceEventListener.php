@@ -110,7 +110,7 @@ class SQLTraceEventListener
             );
 
             $logback = $this->saveSQLTraceToFile(
-                debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 20),
+                debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS),
                 $curr_sql_trace_id
             );
             $ending = end($logback) ?? [];
@@ -130,7 +130,8 @@ class SQLTraceEventListener
      */
     protected function saveSQLTraceToFile(array $traces, string $curr_sql_trace_id): array
     {
-        $i = 10;
+        $i = 0;
+        $j = 1;
         $format_traces = [];
         while (!empty($traces)) {
             $trace = array_pop($traces);
@@ -145,7 +146,7 @@ class SQLTraceEventListener
                     "\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
                     static::get_datetime_ms(),
                     $curr_sql_trace_id,
-                    $format_trace['file'],
+                    $j . '#' . $format_trace['file'],
                     $format_trace['line'],
                     $format_trace['class']
                 ));
@@ -155,13 +156,14 @@ class SQLTraceEventListener
                 //             └── Illuminate\Database\Eloquent\Builder->__call(..) at /example-app/app/Http/Controllers/V1/TestController.php@18
                 fwrite($this->fp4, sprintf(
                     "%s %s %s\n",
-                    $i === 10 ? '[' . $curr_sql_trace_id . ']' : '',
-                    $i === 10 ? '' : (str_repeat(' ', $i) . '└──'),
+                    $i === 0 ? '[' . $curr_sql_trace_id . ']' : '',
+                    $i === 0 ? '' : (str_repeat(' ', 10 + $i) . '└──'),
                     $s
                 ));
                 $format_traces[] = $format_trace;
                 $i++;
             }
+            $j++;
         }
         return $format_traces;
     }

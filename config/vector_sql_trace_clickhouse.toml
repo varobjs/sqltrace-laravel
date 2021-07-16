@@ -21,7 +21,7 @@ include = ["/tmp/sql_trace.log"]
 [transforms.sql_file_log_grok]
 type = "grok_parser"
 inputs = ["sql_file_log"]
-pattern = "\"%{GREEDYDATA:time}\",\"%{WORD:sql_trace_id}\",\"%{PATH:file}\",\"%{INT:line}\",\"%{GREEDYDATA:class}\""
+pattern = "\"%{GREEDYDATA:time}\",\"%{WORD:sql_trace_id}\",\"%{GREEDYDATA:file}\",\"%{INT:line}\",\"%{GREEDYDATA:class}\""
 
 
 [transforms.sql_file_log_clickhose]
