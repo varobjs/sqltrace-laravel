@@ -97,8 +97,6 @@ class SQLTraceEventListener
             // 绑定的值换成\\n
             $bindings = str_replace(["\r", "\n", "\r\n"], '\\n', $bindings);
 
-//            $bindings = str_replace(["\r", "\n", "\r\n"], '', var_export($event->bindings, true));
-
             if (!$this->analyseAndContinue($db_host, $exec_time, $sql)) {
                 return;
             }
@@ -136,7 +134,8 @@ class SQLTraceEventListener
         $format_traces = [];
         while (!empty($traces)) {
             $trace = array_pop($traces);
-            if (strstr($trace['file'], 'vendor/laravel') === false) {
+            $skip_folder = env('SQL_TRACE_INGORE_FODLER', 'vendor');
+            if (strstr($trace['file'], $skip_folder) === false) {
                 $format_trace = [
                     'file' => $trace['file'] ?? '-',
                     'line' => $trace['line'] ?? 0,
