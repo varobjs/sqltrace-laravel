@@ -94,6 +94,9 @@ class SQLTraceEventListener
                 $v === null and $v = "null";
                 return $v;
             }, $event->bindings));
+            // 绑定的值换成\\n
+            $bindings = str_replace(["\r", "\n", "\r\n"], '\\n', $bindings);
+
 //            $bindings = str_replace(["\r", "\n", "\r\n"], '', var_export($event->bindings, true));
 
             if (!$this->analyseAndContinue($db_host, $exec_time, $sql)) {
