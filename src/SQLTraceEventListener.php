@@ -135,10 +135,10 @@ class SQLTraceEventListener
         $format_traces = [];
         while (!empty($traces)) {
             $trace = array_pop($traces);
-            $skip_folder = env('SQL_TRACE_INGORE_FODLER', 'vendor');
-            if (strstr($trace['file'], $skip_folder) === false) {
+            $skip_folder = env('SQL_TRACE_IGNORE_FOLDER', 'vendor');
+            if (isset($trace['file']) && strstr($trace['file'] ?? '', $skip_folder) === false) {
                 $format_trace = [
-                    'file' => $trace['file'] ?? '-',
+                    'file' => $trace['file'] ?: '',
                     'line' => $trace['line'] ?? 0,
                     'class' => $trace['class'] . $trace['type'] . $trace['function'] . '(..)'
                 ];
