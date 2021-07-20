@@ -38,7 +38,7 @@ class SQLTraceEventListener
         $this->fp3 = @fopen($sql_file . '_trace.log', 'a+');
         $this->fp4 = @fopen($sql_file . '_trace_pretty.log', 'a+');
         $this->fp5 = @fopen($sql_file . '_error.log', 'a+');
-        if (env('SQL_TRACE_ANALYSE', 'false')) {
+        if (env('SQL_TRACE_ANALYSE')) {
             try {
                 $this->predis = XRedis::getInstance()->predis;
             } catch (Throwable $e) {
@@ -285,7 +285,7 @@ class SQLTraceEventListener
             $is_continue = $exec_time > 0.1 || random_int(1, 20000) > (20000 - 20);
         }
 
-        if (env('SQL_TRACE_ANALYSE', 'false') === true && $this->predis) {
+        if (env('SQL_TRACE_ANALYSE') === true && $this->predis) {
             $sql_key = md5($db_host . $sql);
             $hash_key = 'SQL_TRACE_HASH_KEY:' . date('Ymd');
             $hash_key_incr = 'SQL_TRACE_HASH_KEY_INCR:' . date('Ymd');
@@ -318,7 +318,11 @@ class SQLTraceEventListener
 
     protected function checkIsOk(): bool
     {
-        return $this->fp1 !== false || $this->fp2 !== false
-            || (env('SQL_TRACE_ANALYSE') === true && $this->predis);
+        if (env('SQL_TRACE_ANALYSE') === true && $this->predis === null) {
+            return false;
+        }
+
+        return $this->fp1 !== false && $this->fp2 !== false && $this->fp3 !== false 
+            && $this->fp4 !== false && $this->fp5 !== false;
     }
 }
