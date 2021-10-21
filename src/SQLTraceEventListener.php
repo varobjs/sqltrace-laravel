@@ -3,6 +3,7 @@
 namespace LaravelSQLTrace;
 
 use Exception;
+use GuzzleHttp\Client;
 use Illuminate\Database\Events\QueryExecuted;
 use Redis;
 use Throwable;
@@ -15,12 +16,10 @@ class SQLTraceEventListener
     protected $fp2;
     /** @var resource $fp3 */
     protected $fp3;
-    /** @var resource $fp4 */
-    protected $fp4;
-    /** @var resource $fp5 */
-    protected $fp5;
     /** @var Redis $predis */
     protected $predis;
+    /** @var \GuzzleHttp\Client $http */
+    protected $http;
 
     /**
      * Create the event listener.
@@ -34,18 +33,17 @@ class SQLTraceEventListener
         $path = pathinfo($sql_file);
         $sql_file = $path['dirname'] . DIRECTORY_SEPARATOR . $path['filename'];
         $this->fp1 = @fopen($sql_file . '.log', 'a+');
-        $this->fp2 = @fopen($sql_file . '_pretty.log', 'a+');
-        $this->fp3 = @fopen($sql_file . '_trace.log', 'a+');
-        $this->fp4 = @fopen($sql_file . '_trace_pretty.log', 'a+');
-        $this->fp5 = @fopen($sql_file . '_error.log', 'a+');
+        $this->fp2 = @fopen($sql_file . '_trace.log', 'a+');
+        $this->fp3 = @fopen($sql_file . '_error.log', 'a+');
         if (env('SQL_TRACE_ANALYSE')) {
             try {
                 $this->predis = XRedis::getInstance()->predis;
             } catch (Throwable $e) {
-                $this->error('[laravel-sql-trace-error-01] ' . $e->getMessage());
+                $this->error('[REDIS_ERROR] ' . $e->getMessage());
                 $this->predis = null;
             }
         }
+        $this->http = new Client(['base_uri' => 'localhost:7788']);
     }
 
     public function __destruct()
@@ -53,8 +51,6 @@ class SQLTraceEventListener
         fclose($this->fp1);
         fclose($this->fp2);
         fclose($this->fp3);
-        fclose($this->fp4);
-        fclose($this->fp5);
     }
 
     /**
@@ -74,58 +70,87 @@ class SQLTraceEventListener
      * ```
      *
      * @param QueryExecuted $event
+     *
      * @return void
      */
     public function handle(QueryExecuted $event)
     {
-        if (!$this->checkIsOk()) {
-            $this->error('[laravel-sql-trace-error-02] check is not ok');
+        if (($check = $this->checkIsOk()) < 0) {
+            $this->error('[CHECK_ERROR] ' . $check);
             return;
         }
         try {
-            $curr_sql_trace_id = static::get_curr_sql_trace_id();
+            $sql_trace_id = static::get_curr_sql_trace_id();
             $db_host = $event->connection->getConfig('host');
-            $exec_time = $event->time; // ms
+            $exec_ms = $event->time; // ms
             $sql = $event->sql;
             // trim \r\n 替换成 space
             $sql = str_replace(["\r", "\n", "\r\n"], '', $sql);
             // 需要单行显示，方便日志集成处理工具
             $bindings = implode(', ', array_map(function ($v) {
-                $v === null and $v = "null";
+                $v === null && $v = "null";
                 return $v;
             }, $event->bindings));
             // 绑定的值换成\\n
             $bindings = str_replace(["\r", "\n", "\r\n"], '\\n', $bindings);
 
-            if (!$this->analyseAndContinue($db_host, $exec_time, $sql)) {
+            if (!$this->analyseAndContinue($db_host, $exec_ms, $sql)) {
                 return;
             }
 
             $this->saveSQLToFile(
                 $db_host,
-                $exec_time,
-                $curr_sql_trace_id,
+                $exec_ms,
+                $sql_trace_id,
                 $sql,
                 $bindings
             );
 
             $logback = $this->saveSQLTraceToFile(
                 debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS),
-                $curr_sql_trace_id
+                $sql_trace_id
             );
-            $ending = end($logback) ?? [];
-            $last_trace = $ending['file'] . '@' . $ending['line'];
-
-            $this->pushLog($db_host, $exec_time, $curr_sql_trace_id, $sql, $bindings, $last_trace);
+            global $argv;
+            $data = [
+                'app_uuid' => static::get_global_app_trace_id(),
+                'sql_uuid' => $sql_trace_id,
+                'db_host' => $db_host,
+                'run_host' => gethostname(),
+                'run_ms' => $exec_ms,
+                'pid' => getmygid(),
+                'request_uri' => PHP_SAPI === 'cli' ? implode(' ', $argv) : ($_SERVER['REQUEST_URI'] ?? ''),
+                'referer' => PHP_SAPI !== 'cli' ? ($_SERVER['HTTP_REFERER'] ?? '') : '',
+                'trace_sql_md5' => md5($sql),
+                'trace_sql' => $sql,
+                'trace_sql_binds' => $bindings,
+                'created_at' => static::get_datetime_ms(),
+                'trace_files' => [],
+            ];
+            foreach ($logback as $item) {
+                $data['trace_files'][] = [
+                    'trace_file' => $item['file'],
+                    'trace_line' => $item['line'],
+                    'trace_class' => $item['class'],
+                    'created_at' => static::get_datetime_ms(),
+                ];
+            }
+            $this->http->post('/api/v1/trace', [
+                'headers' => [
+                    'Content-Type' => 'application/json'
+                ],
+                'body' => $data
+            ]);
         } catch (Throwable $e) {
-            $this->error('[laravel-sql-trace-error-03] ' . $e->getMessage());
+            $this->error('[MAIN_ERROR] ' . $e->getMessage());
         }
     }
 
     /**
      * 保存调用链接，返回sql的logback
-     * @param array $traces
+     *
+     * @param array  $traces
      * @param string $curr_sql_trace_id
+     *
      * @return array
      */
     protected function saveSQLTraceToFile(array $traces, string $curr_sql_trace_id): array
@@ -142,23 +167,13 @@ class SQLTraceEventListener
                     'line' => $trace['line'] ?? 0,
                     'class' => $trace['class'] . $trace['type'] . $trace['function'] . '(..)'
                 ];
-                fwrite($this->fp3, sprintf(
+                fwrite($this->fp2, sprintf(
                     "\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
                     static::get_datetime_ms(),
                     $curr_sql_trace_id,
                     $j . '#' . $format_trace['file'],
                     $format_trace['line'],
                     $format_trace['class']
-                ));
-                $s = $format_trace['class'] . ' at ' . $format_trace['file'] . '@' . $format_trace['line'];
-                // ==> /tmp/sql_trace_pretty.log <==
-                // [839F2E59]  Illuminate\Routing\Controller->callAction(..) at /example-app/routes/api.php@25
-                //             └── Illuminate\Database\Eloquent\Builder->__call(..) at /example-app/app/Http/Controllers/V1/TestController.php@18
-                fwrite($this->fp4, sprintf(
-                    "%s %s %s\n",
-                    $i === 0 ? '[' . $curr_sql_trace_id . ']' : '',
-                    $i === 0 ? '' : (str_repeat(' ', 10 + $i) . '└──'),
-                    $s
                 ));
                 $format_traces[] = $format_trace;
                 $i++;
@@ -169,22 +184,16 @@ class SQLTraceEventListener
     }
 
     /**
-     * // ==> /tmp/sql.log
-     * // [0D4B491C 839F2E59][2021-07-01/14:58:17,7793][127.0.0.1][1ms]
-     * // **************************************************
-     * // select count(*) as aggregate from `test` []
-     * // **************************************************
-     * //
      * @param string $db_host
-     * @param float $exec_time
-     * @param string $curr_sql_trace_id
+     * @param float  $exec_ms
+     * @param string $sql_trace_id
      * @param string $sql
      * @param string $bindings
      */
     protected function saveSQLToFile(
         string $db_host,
-        float $exec_time,
-        string $curr_sql_trace_id,
+        float  $exec_ms,
+        string $sql_trace_id,
         string $sql,
         string $bindings
     )
@@ -194,11 +203,11 @@ class SQLTraceEventListener
             "\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
             config('app.name', 'default'),
             static::get_global_app_trace_id(),
-            $curr_sql_trace_id,
+            $sql_trace_id,
             static::get_datetime_ms(),
             $db_host,
             gethostname(),
-            $exec_time,
+            $exec_ms,
             getmypid(),
             PHP_SAPI,
             PHP_SAPI === 'cli' ? implode(' ', $argv) : ($_SERVER['REQUEST_URI'] ?? ''),
@@ -207,22 +216,11 @@ class SQLTraceEventListener
             $sql,
             $bindings
         ));
-        fwrite($this->fp2, sprintf(
-            "\n[%s][%s][%s][%fms]\n%s\n%s [%s]\n%s\n",
-            static::get_global_app_trace_id() . ' ' . $curr_sql_trace_id,
-            static::get_datetime_ms(),
-            $db_host,
-            $exec_time,
-            str_repeat('*', 50),
-            $sql,
-            $bindings,
-            str_repeat('*', 50)
-        ));
     }
 
     protected static function get_datetime_ms(): string
     {
-        return date('Y-m-d H:i:s.') . str_pad((int)(10000 * (microtime(true) - time())), 4, 0, STR_PAD_LEFT);
+        return date('Y-m-d&H:i:s.') . str_pad((int)(10000 * (microtime(true) - time())), 3, 0, STR_PAD_LEFT);
     }
 
     protected static $global_app_trace_id;
@@ -245,44 +243,25 @@ class SQLTraceEventListener
     }
 
     /**
-     * 主动推送指标到第三方
-     * @param string $db_host
-     * @param float $exec_time
-     * @param string $curr_sql_trace_id
-     * @param string $sql
-     * @param string $bindings
-     * @param string $last_trace
-     */
-    protected function pushLog(
-        string $db_host,
-        float $exec_time,
-        string $curr_sql_trace_id,
-        string $sql,
-        string $bindings,
-        string $last_trace
-    ): void
-    {
-    }
-
-    /**
      * 在此处处理，redis 计数等统计操作
      *
      * @param string $db_host
-     * @param float $exec_time
+     * @param float  $exec_ms
      * @param string $sql
+     *
      * @return bool 返回 false，当前执行完成，不再执行后续逻辑，比如降级处理的写入日志文件，推送第三方
      * @throws Exception
      */
     protected function analyseAndContinue(
         string $db_host,
-        float $exec_time,
+        float  $exec_ms,
         string $sql
     ): bool
     {
         if (app()->environment() === 'local') {
             $is_continue = true;
         } else {
-            $is_continue = $exec_time > 0.1 || random_int(1, 20000) > (20000 - 20);
+            $is_continue = $exec_ms > 0.1 || random_int(1, 20000) > (20000 - 20);
         }
 
         if (env('SQL_TRACE_ANALYSE') === true && $this->predis) {
@@ -300,11 +279,11 @@ class SQLTraceEventListener
                 ));
             }
             $this->predis->hIncrBy($hash_key_incr, $sql_key, 1);
-            $this->predis->hIncrBy($hash_key_time_incr, $sql_key, $exec_time);
+            $this->predis->hIncrBy($hash_key_time_incr, $sql_key, $exec_ms);
             if ($is_continue) {
-                $this->predis->ttl($hash_key) === -1 and $this->predis->expire($hash_key, 2 * 86400);
-                $this->predis->ttl($hash_key_incr) === -1 and $this->predis->expire($hash_key_incr, 2 * 86400);
-                $this->predis->ttl($hash_key_time_incr) === -1 and $this->predis->expire($hash_key_time_incr, 2 * 86400);
+                $this->predis->ttl($hash_key) === -1 && $this->predis->expire($hash_key, 2 * 86400);
+                $this->predis->ttl($hash_key_incr) === -1 && $this->predis->expire($hash_key_incr, 2 * 86400);
+                $this->predis->ttl($hash_key_time_incr) === -1 && $this->predis->expire($hash_key_time_incr, 2 * 86400);
             }
         }
 
@@ -313,16 +292,15 @@ class SQLTraceEventListener
 
     protected function error(string $error)
     {
-        @fwrite($this->fp5, $error);
+        @fwrite($this->fp3, $error);
     }
 
-    protected function checkIsOk(): bool
+    protected function checkIsOk(): int
     {
         if (env('SQL_TRACE_ANALYSE') === true && $this->predis === null) {
-            return false;
+            return -1;
         }
 
-        return $this->fp1 !== false && $this->fp2 !== false && $this->fp3 !== false 
-            && $this->fp4 !== false && $this->fp5 !== false;
+        return $this->fp1 !== false && $this->fp2 !== false && $this->fp3 !== false ? 0 : -2;
     }
 }
