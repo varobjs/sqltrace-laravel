@@ -21,14 +21,14 @@ class SQLTraceEventListener
     protected $predis;
     /** @var Client $http */
     protected $http;
+    protected $singleton;
+    protected static $global_app_trace_id;
 
-    /**
-     * Create the event listener.
-     *
-     * @return void
-     */
     public function __construct()
     {
+        if ($this->singleton) {
+            return $this->singleton;
+        }
         date_default_timezone_set('Asia/Shanghai');
         $sql_file = env('SQL_TRACE_SQL_FILE', '/tmp/sql.log');
         $path = pathinfo($sql_file);
@@ -47,6 +47,7 @@ class SQLTraceEventListener
             }
         }
         $this->http = new Client(['base_uri' => 'localhost:7788']);
+        $this->singleton = $this;
     }
 
     public function __destruct()
@@ -55,12 +56,12 @@ class SQLTraceEventListener
             fclose($this->fp1);
             fclose($this->fp2);
         }
-        fclose($this->fp3);
         $this->uploadLog(true);
+        fclose($this->fp3);
     }
 
     /**
-     * Handle the event.
+     * 处理SQL事件
      *
      * 只要把当前类挂载到 QueryExecuted 事件上，
      * Laravel 的每次数据库执行操作都会执行 handle 函数
@@ -105,7 +106,7 @@ class SQLTraceEventListener
             $bindings = str_replace(["\r", "\n", "\r\n"], '\\n', $bindings);
             $this->saveSQLToFile($db_host, $exec_ms, $sql_trace_id, $sql, $bindings);
 
-            global $argv;
+            global $argv, $global_upload_log_data;
             $data = [
                 'app_uuid' => static::get_global_app_trace_id(),
                 'sql_uuid' => $sql_trace_id,
@@ -131,44 +132,45 @@ class SQLTraceEventListener
                     'created_at' => static::get_datetime_ms(),
                 ];
             }
-            $this->global_data[] = $data;
+            $global_upload_log_data[] = $data;
             $this->uploadLog();
         } catch (Throwable $e) {
             $this->error('[MAIN_ERROR] ' . $e->getMessage());
         }
     }
 
-    protected $global_data = [];
-
     /**
+     * 上传日志
+     *
      * @param bool $force
      */
     protected function uploadLog(bool $force = false)
     {
-        if (empty($this->global_data)) {
+        global $global_upload_log_data;
+        if (empty($global_upload_log_data)) {
             return;
         }
 
-        if ($force || count($this->global_data) >= 10) {
+        if ($force || count($global_upload_log_data) >= 10) {
             try {
-                $body = json_encode($this->global_data);
-                $this->error('upload start..');
+                $body = json_encode($global_upload_log_data);
                 $this->http->post('/api/v1/trace', [
                     'headers' => [
                         'Content-Type' => 'application/json',
                     ],
                     'body' => $body,
                 ]);
-                $this->error('upload end!');
             } catch (Throwable $e) {
                 $this->error('[UPLOAD_ERROR] ' . $e->getMessage());
             }
-            $this->global_data = [];
+            $global_upload_log_data = [];
         }
     }
 
     /**
-     * 保存调用链接，返回sql的logback
+     * 保存调用栈
+     *
+     * 返回sql的logback
      *
      * @param array  $traces
      * @param string $curr_sql_trace_id
@@ -208,6 +210,8 @@ class SQLTraceEventListener
     }
 
     /**
+     * 保存SQL记录
+     *
      * @param string $db_host
      * @param float  $exec_ms
      * @param string $sql_trace_id
@@ -239,13 +243,21 @@ class SQLTraceEventListener
         ));
     }
 
+    /**
+     * 毫秒时间戳
+     *
+     * @return string
+     */
     protected static function get_datetime_ms(): string
     {
         return date('Y-m-d') . 'T' . date('H:i:s.') . str_pad((int)(1000 * (microtime(true) - time())), 3, 0, STR_PAD_LEFT);
     }
 
-    protected static $global_app_trace_id;
-
+    /**
+     * 全局ID
+     *
+     * @return string
+     */
     protected static function get_global_app_trace_id(): string
     {
         if (!static::$global_app_trace_id) {
@@ -258,12 +270,19 @@ class SQLTraceEventListener
         return self::$global_app_trace_id;
     }
 
+    /**
+     * SQL ID
+     *
+     * @return string
+     */
     protected static function get_curr_sql_trace_id(): string
     {
         return md5(time() . getmypid() . rand(0, 9999));
     }
 
     /**
+     * Redis统计
+     *
      * 在此处处理，redis 计数等统计操作
      *
      * @param string $db_host
@@ -273,11 +292,7 @@ class SQLTraceEventListener
      * @return bool 返回 false，当前执行完成，不再执行后续逻辑，比如降级处理的写入日志文件，推送第三方
      * @throws Exception
      */
-    protected function analyseAndContinue(
-        string $db_host,
-        float  $exec_ms,
-        string $sql
-    ): bool
+    protected function analyseAndContinue(string $db_host, float $exec_ms, string $sql): bool
     {
         if (app()->environment() === 'local') {
             $is_continue = true;
@@ -311,11 +326,21 @@ class SQLTraceEventListener
         return $is_continue;
     }
 
+    /**
+     * 错误日志
+     *
+     * @param string $error
+     */
     protected function error(string $error)
     {
         @fwrite($this->fp3, '[' . static::get_datetime_ms() . ']' . $error . PHP_EOL);
     }
 
+    /**
+     * 判断环境是否OK
+     *
+     * @return int
+     */
     protected function checkIsOk(): int
     {
         if (env('SQL_TRACE_ANALYSE') && $this->predis === null) {
