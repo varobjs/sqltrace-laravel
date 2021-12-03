@@ -91,7 +91,7 @@ class SQLTraceEventListener
             $exec_ms = $event->time; // ms
             $sql = $event->sql;
             // trim \r\n 替换成 space
-            $sql = str_replace(["\r", "\n", "\r\n"], '', $sql);
+            $sql = str_replace(["\r", "\n", "\r\n"], ' ', $sql);
             if (!$this->analyseAndContinue($db_host, $exec_ms, $sql)) {
                 return;
             }
@@ -103,7 +103,7 @@ class SQLTraceEventListener
                 return $v;
             }, $event->bindings));
             // 绑定的值换成\\n
-            $bindings = str_replace(["\r", "\n", "\r\n"], '\\n', $bindings);
+            $bindings = str_replace(["\r", "\n", "\r\n"], ' ', $bindings);
             $this->saveSQLToFile($db_host, $exec_ms, $sql_trace_id, $sql, $bindings);
 
             global $argv, $global_upload_log_data;
