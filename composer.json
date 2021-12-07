@@ -1,21 +1,31 @@
 {
-  "name": "varobj/laravel-sqltrace",
-  "type": "project",
-  "description": "The Laravel Framework's sql trace",
-  "keywords": [
-    "framework",
-    "laravel",
-    "sqltrace"
-  ],
-  "license": "MIT",
-  "require": {
-    "php": "^7.2",
-    "ext-redis": "*"
-  },
-  "autoload": {
-    "psr-4": {
-      "LaravelSQLTrace\\": "src/"
-    }
-  },
-  "minimum-stability": "dev"
+	"name": "varobj/laravel-sqltrace",
+	"type": "project",
+	"description": "The Laravel Framework's sql trace",
+	"keywords": [
+		"framework",
+		"laravel",
+		"sqltrace"
+	],
+	"license": "MIT",
+	"require": {
+		"php": "^7.2",
+		"ext-redis": "*",
+		"ext-json": "*"
+	},
+	"require-dev": {
+		"roave/security-advisories": "dev-latest"
+	},
+	"autoload": {
+		"psr-4": {
+			"LaravelSQLTrace\\": "src/"
+		}
+	},
+	"minimum-stability": "dev",
+	"repositories": {
+		"packagist": {
+			"type": "composer",
+			"url": "https://mirrors.aliyun.com/composer/"
+		}
+	}
 }
