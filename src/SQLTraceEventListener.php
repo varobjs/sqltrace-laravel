@@ -13,299 +13,299 @@ use Throwable;
 
 class SQLTraceEventListener
 {
-/** @var resource $fp1 记录 sql.log */
-protected $fp1;
-/** @var resource $fp2 记录 sql_trace.log */
-protected $fp2;
-/** @var resource $fp3 记录 sql_error.log */
-protected $fp3;
-/** @var Redis $predis */
-protected $predis;
-/** @var Client $http */
-protected $http;
-protected $singleton;
-protected static $global_app_trace_id;
+    /** @var resource $fp1 记录 sql.log */
+    protected $fp1;
+    /** @var resource $fp2 记录 sql_trace.log */
+    protected $fp2;
+    /** @var resource $fp3 记录 sql_error.log */
+    protected $fp3;
+    /** @var Redis $predis */
+    protected $predis;
+    /** @var Client $http */
+    protected $http;
+    protected $singleton;
+    protected static $global_app_trace_id;
 
-protected static $ENV_MAP = [
-'log_prefix' => '',
-'enable_log' => false,
-'enable_analytic' => '',
-'dsn' => '', // must
-'ignore_folder' => null,
-'redis_host' => '',
-'redis_port' => '',
-'redis_password' => '',
-];
-
-public function __construct()
-{
-if ($this->singleton) {
-    return;
-}
-$this->loadEnv();
-date_default_timezone_set('Asia/Shanghai');
-$sql_file = static::getEnv('log_prefix');
-$path = pathinfo($sql_file);
-$sql_file = $path['dirname'] . DIRECTORY_SEPARATOR . $path['filename'];
-if (static::getEnv('enable_log')) {
-    $this->fp1 = @fopen($sql_file . '.log', 'ab+');
-    $this->fp2 = @fopen($sql_file . '_trace.log', 'ab+');
-}
-$this->fp3 = @fopen($sql_file . '_error.log', 'ab+');
-if (static::getEnv('enable_analytic')) {
-    try {
-	$this->predis = XRedis::getInstance()->predis;
-    } catch (Throwable $e) {
-	$this->error('[REDIS_ERROR] ' . $e->getMessage());
-	$this->predis = null;
-    }
-}
-$this->http = new Client(['base_uri' => self::getEnv('dsn')]);
-$this->singleton = $this;
-}
-
-/**
-* 处理SQL事件
-*
-* 只要把当前类挂载到 QueryExecuted 事件上，
-* Laravel 的每次数据库执行操作都会执行 handle 函数
-* ```
-* app/Providers/EventServiceProvider.php
-*
-* ...
-* protected $listen = [
-*   \Illuminate\Database\Events\QueryExecuted::class => [ \LaravelSQLTrace\SQLTraceEventListener::class, ],
-* ];
-* ...
-*
-* ```
-*
-* @param QueryExecuted $event
-*
-* @return void
-*/
-public function handle(QueryExecuted $event): void
-{
-if (($check = $this->checkIsOk()) < 0) {
-    $this->error('[CHECK_ERROR] ' . $check);
-    return;
-}
-try {
-    $db_host = $event->connection->getConfig('host');
-    $exec_ms = $event->time; // ms
-    $sql = $event->sql;
-    // trim \r\n 替换成 space
-    $sql = str_replace(["\r", "\n", "\r\n"], ' ', $sql);
-    if (!$this->analyseAndContinue($db_host, $exec_ms, $sql)) {
-	return;
-    }
-
-    $sql_trace_id = static::get_curr_sql_trace_id();
-    // 需要单行显示，方便日志集成处理工具
-    $bindings = implode(', ', array_map(static function ($v) {
-	$v === null && $v = "null";
-	return $v;
-    }, $event->bindings));
-    // 绑定的值换成\\n
-    $bindings = str_replace(["\r", "\n", "\r\n"], ' ', $bindings);
-    $this->saveSQLToFile($db_host, $exec_ms, $sql_trace_id, $sql, $bindings);
-
-    global $argv, $global_upload_log_data;
-    $data = [
-	'app_uuid' => static::get_global_app_trace_id(),
-	'sql_uuid' => $sql_trace_id,
-	'app_name' => config('app.name', 'default') ?? 'no-app-name',
-	'db_host' => $db_host,
-	'run_host' => gethostname(),
-	'run_ms' => (int)$exec_ms,
-	'run_mode' => PHP_SAPI,
-	'pid' => (int)getmygid(),
-	'request_uri' => PHP_SAPI === 'cli' ? implode(' ', $argv) : ($_SERVER['REQUEST_URI'] ?? ''),
-	'referer' => PHP_SAPI !== 'cli' ? ($_SERVER['HTTP_REFERER'] ?? '') : '',
-	'trace_sql_md5' => md5($sql),
-	'trace_sql' => $sql,
-	'trace_sql_binds' => $bindings,
-	'created_at' => static::get_datetime_ms(),
-	'trace_files' => [],
+    protected static $ENV_MAP = [
+        'log_prefix' => '',
+        'enable_log' => false,
+        'enable_analytic' => '',
+        'dsn' => '', // must
+        'ignore_folder' => null,
+        'redis_host' => '',
+        'redis_port' => '',
+        'redis_password' => '',
     ];
-    $logback = $this->saveSQLTraceToFile(debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS), $sql_trace_id);
-    foreach ($logback as $item) {
-	$data['trace_files'][] = [
-	    'trace_file' => $item['file'],
-	    'trace_line' => $item['line'],
-	    'trace_class' => $item['class'],
-	    'created_at' => static::get_datetime_ms(),
-	];
+
+    public function __construct()
+    {
+        if ($this->singleton) {
+            return;
+        }
+        $this->loadEnv();
+        date_default_timezone_set('Asia/Shanghai');
+        $sql_file = static::getEnv('log_prefix');
+        $path = pathinfo($sql_file);
+        $sql_file = $path['dirname'] . DIRECTORY_SEPARATOR . $path['filename'];
+        if (static::getEnv('enable_log')) {
+            $this->fp1 = @fopen($sql_file . '.log', 'ab+');
+            $this->fp2 = @fopen($sql_file . '_trace.log', 'ab+');
+        }
+        $this->fp3 = @fopen($sql_file . '_error.log', 'ab+');
+        if (static::getEnv('enable_analytic')) {
+            try {
+                $this->predis = XRedis::getInstance()->predis;
+            } catch (Throwable $e) {
+                $this->error('[REDIS_ERROR] ' . $e->getMessage());
+                $this->predis = null;
+            }
+        }
+        $this->http = new Client(['base_uri' => self::getEnv('dsn')]);
+        $this->singleton = $this;
     }
-    $global_upload_log_data[] = $data;
-    $this->uploadLog();
-} catch (Throwable $e) {
-    $this->error('[MAIN_ERROR] ' . $e->getMessage());
-}
-}
 
-/**
-* 上传日志
-*
-* @param bool $force
-*/
-protected function uploadLog(bool $force = false): void
-{
-global $global_upload_log_data;
-if (empty($global_upload_log_data)) {
-    return;
-}
+    /**
+     * 处理SQL事件
+     *
+     * 只要把当前类挂载到 QueryExecuted 事件上，
+     * Laravel 的每次数据库执行操作都会执行 handle 函数
+     * ```
+     * app/Providers/EventServiceProvider.php
+     *
+     * ...
+     * protected $listen = [
+     *   \Illuminate\Database\Events\QueryExecuted::class => [ \LaravelSQLTrace\SQLTraceEventListener::class, ],
+     * ];
+     * ...
+     *
+     * ```
+     *
+     * @param QueryExecuted $event
+     *
+     * @return void
+     */
+    public function handle(QueryExecuted $event): void
+    {
+        if (($check = $this->checkIsOk()) < 0) {
+            $this->error('[CHECK_ERROR] ' . $check);
+            return;
+        }
+        try {
+            $db_host = $event->connection->getConfig('host');
+            $exec_ms = $event->time; // ms
+            $sql = $event->sql;
+            // trim \r\n 替换成 space
+            $sql = str_replace(["\r", "\n", "\r\n"], ' ', $sql);
+            if (!$this->analyseAndContinue($db_host, $exec_ms, $sql)) {
+                return;
+            }
 
-if ($force || count($global_upload_log_data) >= 10) {
-    try {
-	$body = json_encode($global_upload_log_data);
-	$this->http->post('/api/v1/trace', [
-	    'headers' => [
-		'Content-Type' => 'application/json',
-	    ],
-	    'body' => $body,
-	]);
-    } catch (Throwable $e) {
-	$this->error(sprintf("[UPLOAD_ERROR] %s %s", $e->getMessage(), json_encode($body)));
+            $sql_trace_id = static::get_curr_sql_trace_id();
+            // 需要单行显示，方便日志集成处理工具
+            $bindings = implode(', ', array_map(static function ($v) {
+                $v === null && $v = "null";
+                return $v;
+            }, $event->bindings));
+            // 绑定的值换成\\n
+            $bindings = str_replace(["\r", "\n", "\r\n"], ' ', $bindings);
+            $this->saveSQLToFile($db_host, $exec_ms, $sql_trace_id, $sql, $bindings);
+
+            global $argv, $global_upload_log_data;
+            $data = [
+                'app_uuid' => static::get_global_app_trace_id(),
+                'sql_uuid' => $sql_trace_id,
+                'app_name' => config('app.name', 'default') ?? 'no-app-name',
+                'db_host' => $db_host,
+                'run_host' => gethostname(),
+                'run_ms' => (int)$exec_ms,
+                'run_mode' => PHP_SAPI,
+                'pid' => (int)getmygid(),
+                'request_uri' => PHP_SAPI === 'cli' ? implode(' ', $argv) : ($_SERVER['REQUEST_URI'] ?? ''),
+                'referer' => PHP_SAPI !== 'cli' ? ($_SERVER['HTTP_REFERER'] ?? '') : '',
+                'trace_sql_md5' => md5($sql),
+                'trace_sql' => $sql,
+                'trace_sql_binds' => $bindings,
+                'created_at' => static::get_datetime_ms(),
+                'trace_files' => [],
+            ];
+            $logback = $this->saveSQLTraceToFile(debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS), $sql_trace_id);
+            foreach ($logback as $item) {
+                $data['trace_files'][] = [
+                    'trace_file' => $item['file'],
+                    'trace_line' => $item['line'],
+                    'trace_class' => $item['class'],
+                    'created_at' => static::get_datetime_ms(),
+                ];
+            }
+            $global_upload_log_data[] = $data;
+            $this->uploadLog();
+        } catch (Throwable $e) {
+            $this->error('[MAIN_ERROR] ' . $e->getMessage());
+        }
     }
-    $global_upload_log_data = [];
-}
-}
 
-/**
-* 保存调用栈
-*
-* 返回sql的logback
-*
-* @param array  $traces
-* @param string $curr_sql_trace_id
-*
-* @return array
-*/
-protected function saveSQLTraceToFile(array $traces, string $curr_sql_trace_id): array
-{
-$j = 1;
-$format_traces = [];
-while (!empty($traces)) {
-    $trace = array_pop($traces);
-    $skip_folder = static::getEnv('ignore_folder');
-    if (isset($trace['file']) && strpos($trace['file'] ?? '', $skip_folder) === false) {
-	$format_trace = [
-	    'file' => $trace['file'] ?: '',
-	    'line' => $trace['line'] ?? 0,
-	    'class' => $trace['class'] . $trace['type'] . $trace['function'] . '(..)'
-	];
-	if (static::getEnv('enable_log')) {
-	    fwrite($this->fp2, sprintf(
-		"\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
-		static::get_datetime_ms(),
-		$curr_sql_trace_id,
-		$j . '#' . $format_trace['file'],
-		$format_trace['line'],
-		$format_trace['class']
-	    ));
-	}
-	$format_traces[] = $format_trace;
+    /**
+     * 上传日志
+     *
+     * @param bool $force
+     */
+    protected function uploadLog(bool $force = false): void
+    {
+        global $global_upload_log_data;
+        if (empty($global_upload_log_data)) {
+            return;
+        }
+
+        if ($force || count($global_upload_log_data) >= 10) {
+            try {
+                $body = json_encode($global_upload_log_data);
+                $this->http->post('/api/v1/trace', [
+                    'headers' => [
+                        'Content-Type' => 'application/json',
+                    ],
+                    'body' => $body,
+                ]);
+            } catch (Throwable $e) {
+                $this->error(sprintf("[UPLOAD_ERROR] %s %s", $e->getMessage(), json_encode($body)));
+            }
+            $global_upload_log_data = [];
+        }
     }
-    $j++;
-}
-return $format_traces;
-}
 
-/**
-* 保存SQL记录
-*
-* @param string $db_host
-* @param float  $exec_ms
-* @param string $sql_trace_id
-* @param string $sql
-* @param string $bindings
-*
-* @throws Exception
-*/
-protected function saveSQLToFile(string $db_host, float $exec_ms, string $sql_trace_id, string $sql, string $bindings): void
-{
-if (!static::getEnv('enable_log')) {
-    return;
-}
-global $argv;
-fwrite($this->fp1, sprintf(
-    "\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
-    config('app.name', 'default'),
-    static::get_global_app_trace_id(),
-    $sql_trace_id,
-    static::get_datetime_ms(),
-    $db_host,
-    gethostname(),
-    $exec_ms,
-    getmypid(),
-    PHP_SAPI,
-    PHP_SAPI === 'cli' ? implode(' ', $argv) : ($_SERVER['REQUEST_URI'] ?? ''),
-    PHP_SAPI !== 'cli' ? ($_SERVER['HTTP_REFERER'] ?? '') : '',
-    md5($sql),
-    $sql,
-    $bindings
-));
-}
+    /**
+     * 保存调用栈
+     *
+     * 返回sql的logback
+     *
+     * @param array  $traces
+     * @param string $curr_sql_trace_id
+     *
+     * @return array
+     */
+    protected function saveSQLTraceToFile(array $traces, string $curr_sql_trace_id): array
+    {
+        $j = 1;
+        $format_traces = [];
+        while (!empty($traces)) {
+            $trace = array_pop($traces);
+            $skip_folder = static::getEnv('ignore_folder');
+            if (isset($trace['file']) && strpos($trace['file'] ?? '', $skip_folder) === false) {
+                $format_trace = [
+                    'file' => $trace['file'] ?: '',
+                    'line' => $trace['line'] ?? 0,
+                    'class' => $trace['class'] . $trace['type'] . $trace['function'] . '(..)'
+                ];
+                if (static::getEnv('enable_log')) {
+                    fwrite($this->fp2, sprintf(
+                        "\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
+                        static::get_datetime_ms(),
+                        $curr_sql_trace_id,
+                        $j . '#' . $format_trace['file'],
+                        $format_trace['line'],
+                        $format_trace['class']
+                    ));
+                }
+                $format_traces[] = $format_trace;
+            }
+            $j++;
+        }
+        return $format_traces;
+    }
 
-/**
-* 毫秒时间戳
-*
-* @return string
-*/
-protected static function get_datetime_ms(): string
-{
-return date('Y-m-d') . 'T' . date('H:i:s.') . str_pad((int)(1000 * (microtime(true) - time())), 3, 0, STR_PAD_LEFT);
-}
+    /**
+     * 保存SQL记录
+     *
+     * @param string $db_host
+     * @param float  $exec_ms
+     * @param string $sql_trace_id
+     * @param string $sql
+     * @param string $bindings
+     *
+     * @throws Exception
+     */
+    protected function saveSQLToFile(string $db_host, float $exec_ms, string $sql_trace_id, string $sql, string $bindings): void
+    {
+        if (!static::getEnv('enable_log')) {
+            return;
+        }
+        global $argv;
+        fwrite($this->fp1, sprintf(
+            "\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
+            config('app.name', 'default'),
+            static::get_global_app_trace_id(),
+            $sql_trace_id,
+            static::get_datetime_ms(),
+            $db_host,
+            gethostname(),
+            $exec_ms,
+            getmypid(),
+            PHP_SAPI,
+            PHP_SAPI === 'cli' ? implode(' ', $argv) : ($_SERVER['REQUEST_URI'] ?? ''),
+            PHP_SAPI !== 'cli' ? ($_SERVER['HTTP_REFERER'] ?? '') : '',
+            md5($sql),
+            $sql,
+            $bindings
+        ));
+    }
 
-/**
-* 全局ID
-*
-* @return string
-* @throws Exception
-*/
-protected static function get_global_app_trace_id(): string
-{
-if (!static::$global_app_trace_id) {
-    static::$global_app_trace_id = $_SERVER['HTTP_TRACE_ID'] ??
-	(
-	    $_GET['trace_id'] ??
-	    md5(time() . getmypid() . random_int(0, 9999))
-	);
-}
-return self::$global_app_trace_id;
-}
+    /**
+     * 毫秒时间戳
+     *
+     * @return string
+     */
+    protected static function get_datetime_ms(): string
+    {
+        return date('Y-m-d') . 'T' . date('H:i:s.') . str_pad((int)(1000 * (microtime(true) - time())), 3, 0, STR_PAD_LEFT);
+    }
 
-/**
-* SQL ID
-*
-* @return string
-* @throws Exception
-*/
-protected static function get_curr_sql_trace_id(): string
-{
-return md5(time() . getmypid() . random_int(0, 9999));
-}
+    /**
+     * 全局ID
+     *
+     * @return string
+     * @throws Exception
+     */
+    protected static function get_global_app_trace_id(): string
+    {
+        if (!static::$global_app_trace_id) {
+            static::$global_app_trace_id = $_SERVER['HTTP_TRACE_ID'] ??
+                (
+                    $_GET['trace_id'] ??
+                    md5(time() . getmypid() . random_int(0, 9999))
+                );
+        }
+        return self::$global_app_trace_id;
+    }
 
-/**
-* Redis统计
-*
-* 在此处处理，redis 计数等统计操作
-*
-* @param string $db_host
-* @param float  $exec_ms
-* @param string $sql
-*
-* @return bool 返回 false，当前执行完成，不再执行后续逻辑，比如降级处理的写入日志文件，推送第三方
-* @throws Exception
-*/
-protected function analyseAndContinue(string $db_host, float $exec_ms, string $sql): bool
-{
-if (app()->environment() === 'local') {
-    $is_continue = true;
-} else {
-    $is_continue = $exec_ms > 0.1 || random_int(1, 20000) > (20000 - 20);
-}
+    /**
+     * SQL ID
+     *
+     * @return string
+     * @throws Exception
+     */
+    protected static function get_curr_sql_trace_id(): string
+    {
+        return md5(time() . getmypid() . random_int(0, 9999));
+    }
+
+    /**
+     * Redis统计
+     *
+     * 在此处处理，redis 计数等统计操作
+     *
+     * @param string $db_host
+     * @param float  $exec_ms
+     * @param string $sql
+     *
+     * @return bool 返回 false，当前执行完成，不再执行后续逻辑，比如降级处理的写入日志文件，推送第三方
+     * @throws Exception
+     */
+    protected function analyseAndContinue(string $db_host, float $exec_ms, string $sql): bool
+    {
+        if (app()->environment() === 'local') {
+            $is_continue = true;
+        } else {
+            $is_continue = $exec_ms > 0.1 || random_int(1, 20000) > (20000 - 20);
+        }
 
         if ($this->predis && static::getEnv('enable_analytic')) {
             $sql_key = md5($db_host . $sql);
@@ -382,7 +382,6 @@ if (app()->environment() === 'local') {
     {
         return self::$ENV_MAP[$key];
     }
-
 
     public function __destruct()
     {
