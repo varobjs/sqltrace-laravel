@@ -111,6 +111,8 @@ class SQLTraceEventListener
             $this->saveSQLToFile($db_host, $exec_ms, $sql_trace_id, $sql, $bindings);
 
             global $argv, $global_upload_log_data;
+            $api_uri = sprintf("%s %s", $_SERVER['REQUEST_METHOD'] ?? '', $_SERVER['REQUEST_URI'] ?? '');
+
             $data = [
                 'app_uuid' => static::get_global_app_trace_id(),
                 'sql_uuid' => $sql_trace_id,
@@ -120,7 +122,7 @@ class SQLTraceEventListener
                 'run_ms' => (int)$exec_ms,
                 'run_mode' => PHP_SAPI,
                 'pid' => (int)getmygid(),
-                'request_uri' => PHP_SAPI === 'cli' ? implode(' ', $argv) : ($_SERVER['REQUEST_URI'] ?? ''),
+                'request_uri' => PHP_SAPI === 'cli' ? implode(' ', $argv) : $api_uri,
                 'referer' => PHP_SAPI !== 'cli' ? ($_SERVER['HTTP_REFERER'] ?? '') : '',
                 'trace_sql_md5' => md5($sql),
                 'trace_sql' => $sql,
