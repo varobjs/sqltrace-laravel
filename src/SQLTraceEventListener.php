@@ -7,6 +7,7 @@ namespace LaravelSQLTrace;
 
 use Exception;
 use GuzzleHttp\Client;
+use http\Env;
 use Illuminate\Database\Events\QueryExecuted;
 use Redis;
 use Throwable;
@@ -30,6 +31,7 @@ class SQLTraceEventListener
         'log_prefix' => '',
         'enable_log' => false,
         'enable_analytic' => '',
+        'enable_params_log' => false,
         'dsn' => '', // must
         'ignore_folder' => null,
         'redis_host' => '',
@@ -110,8 +112,10 @@ class SQLTraceEventListener
             $bindings = str_replace(["\r", "\n", "\r\n"], ' ', $bindings);
             $this->saveSQLToFile($db_host, $exec_ms, $sql_trace_id, $sql, $bindings);
 
-            global $argv, $global_upload_log_data;
-            $api_uri = sprintf("%s %s", $_SERVER['REQUEST_METHOD'] ?? '', $_SERVER['REQUEST_URI'] ?? '');
+            global $argv, $global_upload_log_data, $_get, $_post;
+            $_uri = $_SERVER['REQUEST_URI'] ?? '';
+            $_uri = explode('?', $_uri)[0] ?? '';
+            $api_uri = sprintf("%s %s", $_SERVER['REQUEST_METHOD'] ?? '', $_uri);
 
             $data = [
                 'app_uuid' => static::get_global_app_trace_id(),
@@ -130,6 +134,12 @@ class SQLTraceEventListener
                 'created_at' => static::get_datetime_ms(),
                 'trace_files' => [],
             ];
+            if (empty($_get)) {
+                $_get = json_encode($_GET);
+                $_post = json_encode($_POST);
+                $data['request_query'] = $_get;
+                $data['request_post'] = $_post;
+            }
             $logback = $this->saveSQLTraceToFile(debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS), $sql_trace_id);
             foreach ($logback as $item) {
                 $data['trace_files'][] = [
@@ -373,6 +383,7 @@ class SQLTraceEventListener
         self::$ENV_MAP['redis_host'] = env('SQL_TRACE_REDIS_HOST', '127.0.0.1');
         self::$ENV_MAP['redis_port'] = env('SQL_TRACE_REDIS_PORT', 6379);
         self::$ENV_MAP['redis_password'] = env('SQL_TRACE_REDIS_PASSWORD', 'vendor');
+        self::$ENV_MAP['enable_params_log'] = env('SQL_TRACE_ENABLE_PARAMS_LOG', false);
     }
 
     /**
