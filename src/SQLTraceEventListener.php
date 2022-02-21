@@ -62,7 +62,9 @@ class SQLTraceEventListener
                 $this->predis = null;
             }
         }
-        $this->http = new Client(['base_uri' => self::getEnv('dsn')]);
+        if (self::getEnv('dsn')) {
+            $this->http = new Client(['base_uri' => self::getEnv('dsn')]);
+        }
         $this->singleton = $this;
     }
 
@@ -163,6 +165,9 @@ class SQLTraceEventListener
      */
     protected function uploadLog(bool $force = false): void
     {
+        if (!$this->http) {
+            return;
+        }
         global $global_upload_log_data;
         if (empty($global_upload_log_data)) {
             return;
@@ -378,7 +383,7 @@ class SQLTraceEventListener
         self::$ENV_MAP['log_prefix'] = env('SQL_TRACE_SQL_PREFIX', '/tmp/sql');
         self::$ENV_MAP['enable_log'] = env('SQL_TRACE_ENABLE_LOG', true);
         self::$ENV_MAP['enable_analytic'] = env('SQL_TRACE_ANALYTIC', false);
-        self::$ENV_MAP['dsn'] = env('SQL_TRACE_DSN');
+        self::$ENV_MAP['dsn'] = env('SQL_TRACE_DSN', '');
         self::$ENV_MAP['ignore_folder'] = env('SQL_TRACE_IGNORE_FOLDER', 'vendor');
         self::$ENV_MAP['redis_host'] = env('SQL_TRACE_REDIS_HOST', '127.0.0.1');
         self::$ENV_MAP['redis_port'] = env('SQL_TRACE_REDIS_PORT', 6379);
