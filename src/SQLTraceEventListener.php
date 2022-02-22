@@ -63,7 +63,7 @@ class SQLTraceEventListener
             }
         }
         if (self::getEnv('dsn')) {
-            $this->http = new Client(['base_uri' => self::getEnv('dsn')]);
+            $this->http = new Client(['base_uri' => self::getEnv('dsn'), 'timeout' => 1]);
         }
         $this->singleton = $this;
     }
