@@ -7,7 +7,6 @@ namespace LaravelSQLTrace;
 
 use Exception;
 use GuzzleHttp\Client;
-use http\Env;
 use Illuminate\Database\Events\QueryExecuted;
 use Redis;
 use Throwable;
