@@ -46,7 +46,8 @@ class Log
             static::$reqId = $_SERVER['X_REQ_ID'] . '-' . $request_id_seq;
         }
         if (empty(static::$reqId)) {
-            static::$reqId = Utils::uuid() . '-' . $request_id_seq;
+            $_SERVER['X_REQ_ID'] = Utils::uuid();
+            static::$reqId = $_SERVER['X_REQ_ID'] . '-' . $request_id_seq;
         }
         return preg_replace('/(\d+)$/', $request_id_seq, static::$reqId);
     }
