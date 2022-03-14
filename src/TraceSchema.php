@@ -64,10 +64,10 @@ class TraceSchema
 
         $logback = $this->format_traces(debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS));
         foreach ($logback as $item) {
-            $this->trace_files = [
-                'trace_file' => $item['file'],
-                'trace_line' => $item['line'],
-                'trace_class' => $item['class'],
+            $this->trace_files[] = [
+                'trace_file' => $item['file'] ?? '',
+                'trace_line' => $item['line'] ?? '',
+                'trace_class' => $item['class'] ?? '',
                 'created_at' => Utils::get_datetime_ms(),
             ];
         }
@@ -75,7 +75,6 @@ class TraceSchema
 
     protected function format_traces(array $traces): array
     {
-        $j = 1;
         $format_traces = [];
         while (!empty($traces)) {
             $trace = array_pop($traces);
@@ -88,7 +87,6 @@ class TraceSchema
                 ];
                 $format_traces[] = $format_trace;
             }
-            $j++;
         }
         return $format_traces;
     }

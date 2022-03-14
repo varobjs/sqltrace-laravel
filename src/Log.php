@@ -28,7 +28,9 @@ class Log
             if (!$logfile) {
                 file_put_contents($logfile, '', FILE_APPEND);
             }
-            $this->log = @fopen($logfile, 'ab+');
+            if ($logfile) {
+                $this->log = @fopen($logfile, 'ab+');
+            }
         }
     }
 
@@ -54,9 +56,9 @@ class Log
 
     protected static function getDefaultContext(array &$context, int $logOffset = 0): void
     {
-        $context['__req_id'] = static::getReqId();
+        $context['@req_id'] = static::getReqId();
         $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 2 + $logOffset);
-        $context['__file'] = sprintf(
+        $context['@file'] = sprintf(
             '%s@%d',
             $trace[1 + $logOffset]['file'] ?? '',
             $trace[1 + $logOffset]['line'] ?? ''
@@ -67,8 +69,10 @@ class Log
     {
         static::getDefaultContext($context, $logOffset);
         $context['msg'] = $msg;
-        $context['__timestamp'] = date('Y-m-d H:i:s') . strstr(microtime(true), '.');
-        fwrite($this->log, json_encode($context) . PHP_EOL);
+        $context['@timestamp'] = date('Y-m-d H:i:s') . strstr(microtime(true), '.');
+        if ($this->log) {
+            fwrite($this->log, json_encode($context) . PHP_EOL);
+        }
     }
 
     public function __destruct()
