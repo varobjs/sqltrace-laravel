@@ -42,12 +42,12 @@ class Log
         } else {
             $request_id_seq++;
         }
-        if (empty(static::$reqId) && !empty($_SERVER['X_REQ_ID'])) {
-            static::$reqId = $_SERVER['X_REQ_ID'] . '-' . $request_id_seq;
+        if (empty(static::$reqId) && !empty($_SERVER['X-REQ-ID'])) {
+            static::$reqId = $_SERVER['X-REQ-ID'] . '-' . $request_id_seq;
         }
         if (empty(static::$reqId)) {
-            $_SERVER['X_REQ_ID'] = Utils::uuid();
-            static::$reqId = $_SERVER['X_REQ_ID'] . '-' . $request_id_seq;
+            $_SERVER['X-REQ-ID'] = Utils::uuid();
+            static::$reqId = $_SERVER['X-REQ-ID'] . '-' . $request_id_seq;
         }
         return preg_replace('/(\d+)$/', $request_id_seq, static::$reqId);
     }
