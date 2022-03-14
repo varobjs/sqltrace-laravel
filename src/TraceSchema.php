@@ -20,8 +20,6 @@ class TraceSchema
     protected $db_host;
     protected $run_ms;
     protected $trace_sql;
-    protected $trace_sql_md5;
-    protected $trace_sql_binds;
 
     /**
      * @param QueryExecuted $event
@@ -32,9 +30,13 @@ class TraceSchema
     {
         $schema = new TraceSchema();
         $schema->setHost($event->connection->getConfig('host'));
-        $schema->setSql($event->sql);
+        $sql = $event->sql;
+        foreach ($event->bindings as $binding) {
+            $value = is_numeric($binding) ? $binding : "'" . $binding . "'";
+            $sql = preg_replace('/\?/', $value, $sql, 1);
+        }
+        $schema->setSql($sql);
         $schema->setRunMs($event->time);
-        $schema->setBinds($event->bindings);
 
         return $schema;
     }
@@ -99,17 +101,11 @@ class TraceSchema
     public function setSql(string $sql): void
     {
         $this->trace_sql = $sql;
-        $this->trace_sql_md5 = md5($sql);
     }
 
     public function setRunMs(float $ms): void
     {
         $this->run_ms = $ms;
-    }
-
-    public function setBinds(array $binds): void
-    {
-        $this->trace_sql_binds = implode(' ', $binds);
     }
 
     public function toArray(): array

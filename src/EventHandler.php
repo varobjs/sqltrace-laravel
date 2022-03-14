@@ -4,7 +4,6 @@ namespace SQLTrace;
 
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Events\QueryExecuted;
-use Illuminate\Support\Facades\Log;
 
 class EventHandler
 {
@@ -33,7 +32,7 @@ class EventHandler
     {
         $traceSchema = TraceSchema::create($query);
         if ($traceSchema) {
-            Log::info('trace-sql', $traceSchema->toArray());
+            Log::getInstance()->info('trace-sql', $traceSchema->toArray());
         }
     }
 }
