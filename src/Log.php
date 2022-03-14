@@ -2,10 +2,36 @@
 
 namespace SQLTrace;
 
-use Illuminate\Support\Facades\Log as LaravelLog;
+use Illuminate\Container\Container;
 
 class Log
 {
+    protected static $instance;
+
+    public static function getInstance(): Log
+    {
+        if (!static::$instance) {
+            static::$instance = new self();
+        }
+        return static::$instance;
+    }
+
+    public $log;
+
+    public function __construct()
+    {
+        $logfile = Container::getInstance()['config']['SQLTrace']['log_file'];
+        if ($logfile) {
+            $path = pathinfo($logfile);
+            $logfile = ($path['dirname'] ?? '') . DIRECTORY_SEPARATOR . ($path['filename'] ?? '');
+            $logfile .= '.' . date('Ymd') . '.log';
+            if (!$logfile) {
+                file_put_contents($logfile, '', FILE_APPEND);
+            }
+            $this->log = @fopen($logfile, 'ab+');
+        }
+    }
+
     protected static $reqId;
 
     public static function getReqId(): string
@@ -36,57 +62,16 @@ class Log
         );
     }
 
-    public static function info(string $msg, array $context = [], int $logOffset = 0): void
+    public function info(string $msg, array $context = [], int $logOffset = 0): void
     {
         static::getDefaultContext($context, $logOffset);
-        LaravelLog::info($msg, $context);
+        $context['msg'] = $msg;
+        $context['__timestamp'] = date('Y-m-d H:i:s') . strstr(microtime(true), '.');
+        fwrite($this->log, json_encode($context) . PHP_EOL);
     }
 
-    public static function error(string $msg, array $context = [], int $logOffset = 0): void
+    public function __destruct()
     {
-        static::getDefaultContext($context, $logOffset);
-        LaravelLog::error($msg, $context);
-    }
-
-    public static function debug(string $msg, array $context = [], int $logOffset = 0): void
-    {
-        static::getDefaultContext($context, $logOffset);
-        LaravelLog::debug($msg, $context);
-    }
-
-    public static function warning(string $msg, array $context = [], int $logOffset = 0): void
-    {
-        static::getDefaultContext($context, $logOffset);
-        LaravelLog::warning($msg, $context);
-    }
-
-    public static function notice(string $msg, array $context = [], int $logOffset = 0): void
-    {
-        static::getDefaultContext($context, $logOffset);
-        LaravelLog::notice($msg, $context);
-    }
-
-    public static function critical(string $msg, array $context = [], int $logOffset = 0): void
-    {
-        static::getDefaultContext($context, $logOffset);
-        LaravelLog::critical($msg, $context);
-    }
-
-    public static function alert(string $msg, array $context = [], int $logOffset = 0): void
-    {
-        static::getDefaultContext($context, $logOffset);
-        LaravelLog::alert($msg, $context);
-    }
-
-    public static function emergency(string $msg, array $context = [], int $logOffset = 0): void
-    {
-        static::getDefaultContext($context, $logOffset);
-        LaravelLog::emergency($msg, $context);
-    }
-
-    public static function log(string $level, string $msg, array $context = [], int $logOffset = 0): void
-    {
-        static::getDefaultContext($context, $logOffset);
-        LaravelLog::log($level, $msg, $context);
+        fclose($this->log);
     }
 }
