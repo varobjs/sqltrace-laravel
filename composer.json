@@ -10,9 +10,8 @@
     "license": "MIT",
     "require": {
         "php": "^7.2",
-        "illuminate/support": "^6.0",
         "symfony/polyfill-uuid": "^1.13",
-        "guzzlehttp/guzzle": "^7.4",
+        "guzzlehttp/guzzle": "^6.4",
         "ext-json": "*"
     },
     "require-dev": {

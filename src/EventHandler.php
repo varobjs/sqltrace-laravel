@@ -8,7 +8,7 @@ use Illuminate\Database\Events\QueryExecuted;
 class EventHandler
 {
     /**
-     * @var \Illuminate\Contracts\Events\Dispatcher
+     * @var Dispatcher
      */
     private $events;
 
@@ -16,7 +16,7 @@ class EventHandler
      * EventHandler constructor.
      *
      * @param Dispatcher $events
-     * @param array      $config
+     * @param array $config
      */
     public function __construct(Dispatcher $events, array $config)
     {
@@ -30,9 +30,6 @@ class EventHandler
 
     public function queryExecuted(QueryExecuted $query): void
     {
-        $traceSchema = TraceSchema::create($query);
-        if ($traceSchema) {
-            Log::getInstance()->info('trace-sql', $traceSchema->toArray());
-        }
+        TraceAppSchema::create($query);
     }
 }
