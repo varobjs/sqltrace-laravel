@@ -1,3 +1,6 @@
+依赖 sentry 的版本迁移到 https://github.com/nilisnone/sqltrace-laravel， 当前项目产生的 SQL 日志，只保存到本地日志。
+
+
 # 介绍
 
 大量依赖数据库的业务，可以通过记录生命周期内所有 SQL 及其 SQL 执行位置，来调试代码。
