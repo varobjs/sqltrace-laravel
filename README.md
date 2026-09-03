@@ -1,4 +1,4 @@
-依赖 sentry 的版本迁移到 https://github.com/nilisnone/sqltrace-laravel 当前项目产生的 SQL 日志，只保存到本地日志。
+新版本迁移到 https://github.com/nilisnone/sqltrace-laravel 当前项目产生的 SQL 日志，只保存到本地日志。
 
 
 # 介绍
